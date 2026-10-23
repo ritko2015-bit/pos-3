@@ -195,11 +195,11 @@
         <label class="setup-lbl" for="setup-waiter">Имя официанта (необязательно)</label>
         <input type="text" id="setup-waiter" class="setup-inp" placeholder="Аня">
         <label class="setup-lbl" for="setup-raw">Ссылка на меню в интернете — необязательно</label>
-        <input type="text" id="setup-raw" class="setup-inp" placeholder="https://jsonblob.com/api/jsonBlob/… или https://raw.githubusercontent.com/…">
+        <input type="text" id="setup-raw" class="setup-inp" placeholder="https://имя.github.io/riko/ — адрес вашей страницы">
         <button type="button" class="modal-add" onclick="saveSetup()">Сохранить и проверить</button>
         <button type="button" class="modal-close" onclick="checkMenuNow()">🔄 Проверить обновления меню</button>
         <button type="button" class="modal-close" onclick="closeSetup()">Работать без связи (офлайн)</button>
-        <div class="hint" style="margin-top:10px">Сборка POS v48 от 23.10.2026</div>
+        <div class="hint" style="margin-top:10px">Сборка POS v52 от 23.10.2026</div>
     </div>
 </div>
 <div class="modal" id="item-modal" onclick="if (event.target === this) closeModal()">
@@ -558,45 +558,9 @@ function closeLog() {
 
 async function fetchRemoteMenu() {
     try {
-        const lr = await fetch('menu.json?t=' + Date.now(), { cache: 'no-store' });
-        if (lr.ok) {
-            const lmenu = JSON.parse(await lr.text());
-            if (Array.isArray(lmenu) && lmenu.length) {
-                MENU = lmenu;
-                lsSet('pos_riko_menu_remote', JSON.stringify(lmenu));
-                renderMenu();
-                toast('Меню обновлено с сервера ✅');
-                return;
-            }
-        }
+        const ok = await refreshMenuCore(null);
+        if (ok) return;
     } catch (e) {}
-    const cmdMenu1 = await fetchMenuFromCommands();
-    if (cmdMenu1) {
-        const cached1 = lsGet('pos_riko_menu_remote');
-        if (cached1 !== JSON.stringify(cmdMenu1)) {
-            lsSet('pos_riko_menu_remote', JSON.stringify(cmdMenu1));
-            MENU = cmdMenu1; renderMenu();
-            toast('Меню обновлено из интернета ✅');
-        }
-        return;
-    }
-    const rawCfg = CONFIG.MENU_RAW_URL && CONFIG.MENU_RAW_URL !== '__MENU_RAW_URL__' && CONFIG.MENU_RAW_URL.indexOf('https') === 0 ? CONFIG.MENU_RAW_URL : '';
-    const rawUrl = rawCfg || (cfgGet().rawUrl || '');
-    if (rawUrl) {
-        try {
-            const rr = await fetch(rawUrl + '?t=' + Date.now());
-            if (rr.ok) {
-                const gmenu = JSON.parse(await rr.text());
-                if (Array.isArray(gmenu) && gmenu.length) {
-                    MENU = gmenu;
-                    lsSet('pos_riko_menu_remote', JSON.stringify(gmenu));
-                    renderMenu();
-                    toast('Меню обновлено из интернета ✅');
-                    return;
-                }
-            }
-        } catch (e) {}
-    }
     if (!tgToken() || !tgChat()) return;
     let fileId = CONFIG.MENU_FILE_ID && CONFIG.MENU_FILE_ID !== '__MENU_FILE_ID__' ? CONFIG.MENU_FILE_ID : '';
     let chatOk = false;
@@ -636,35 +600,12 @@ async function fetchRemoteMenu() {
             }
         }
         stage = 'разбор файла';
-        let data = null;
-        try { data = JSON.parse(raw); } catch (e3) { throw new Error('файл меню не читается (не JSON)'); }
-        if (Array.isArray(data) && data.length) {
-            MENU = data;
-            lsSet('pos_riko_menu_remote', JSON.stringify(data));
+        const res = parseMenuPayload(raw);
+        if (res) {
+            MENU = mergeBackImages(res.menu);
+            lsSet('pos_riko_menu_remote', JSON.stringify(MENU));
             renderMenu();
             toast('Меню обновлено с кухни ✅ (' + Math.round(raw.length / 1024) + ' КБ)');
-            return;
-        }
-        if (data && Array.isArray(data.items) && data.items.length) {
-            MENU = data.items;
-            lsSet('pos_riko_menu_light', JSON.stringify(data));
-            renderMenu();
-            toast('Меню обновлено с кухни ✅ (лёгкая версия, ' + Math.round(raw.length / 1024) + ' КБ)');
-            if (data.photosFileId) {
-                fetch('https://api.telegram.org/bot' + tgToken() + '/getFile?file_id=' + encodeURIComponent(data.photosFileId))
-                    .then(r2 => r2.json())
-                    .then(gd2 => gd2.ok ? fetch('https://api.telegram.org/file/bot' + tgToken() + '/' + gd2.result.file_path) : null)
-                    .then(dl2 => dl2 ? dl2.text() : null)
-                    .then(raw2 => raw2 ? JSON.parse(raw2) : null)
-                    .then(full => {
-                        if (Array.isArray(full) && full.length) {
-                            MENU = full;
-                            lsSet('pos_riko_menu_remote', JSON.stringify(full));
-                            renderMenu();
-                        }
-                    })
-                    .catch(e4 => {});
-            }
             return;
         }
         throw new Error('неизвестный формат файла меню');
@@ -687,10 +628,111 @@ async function fetchRemoteMenu() {
     }
 }
 
+function ghRawCandidates(v) {
+    try {
+        const s = String(v || '').trim();
+        if (!s) return [];
+        if (s.indexOf('raw.githubusercontent.com') !== -1) return [s];
+        let user = '', repo = '';
+        if (s.indexOf('github.io') !== -1) {
+            const clean = s.replace(/^https?:\/\//, '').split('?')[0].replace(/\/+$/, '');
+            const parts = clean.split('/');
+            if (!parts[0] || parts[0].indexOf('.') === -1) return [];
+            user = parts[0].split('.')[0];
+            repo = (parts.length > 1 && parts[1]) ? parts[1] : (user + '.github.io');
+        } else {
+            const clean = s.replace(/^https?:\/\/(www\.)?github\.com\//, '').split('?')[0].replace(/\/+$/, '');
+            const parts = clean.split('/');
+            if (parts.length < 2 || !parts[0] || !parts[1]) return [];
+            user = parts[0]; repo = parts[1];
+        }
+        const base = 'https://raw.githubusercontent.com/' + user + '/' + repo + '/';
+        return [base + 'main/pos_riko_menu.json', base + 'master/pos_riko_menu.json'];
+    } catch (e) { return []; }
+}
+
+function parseMenuPayload(raw) {
+    let data = null;
+    try { data = JSON.parse(raw); } catch (e) { return null; }
+    if (Array.isArray(data) && data.length) return { menu: data, ts: 0 };
+    if (data && typeof data === 'object') {
+        const items = Array.isArray(data.items) ? data.items : (Array.isArray(data.menu) ? data.menu : null);
+        if (items && items.length) return { menu: items, ts: parseInt(data.ts, 10) || 0 };
+    }
+    return null;
+}
+
+async function fetchGhMenu(diag) {
+    const push = (s) => { if (diag) diag.push(s); };
+    const seen = {};
+    const cands = [];
+    ghRawCandidates(CONFIG.MENU_RAW_URL).concat(ghRawCandidates(cfgGet().rawUrl || '')).forEach(u => {
+        if (!seen[u]) { seen[u] = 1; cands.push(u); }
+    });
+    if (!cands.length) { push('GitHub: адрес не указан (⚙️ Настройки — «Адрес сайта»)'); return null; }
+    for (let i = 0; i < cands.length; i++) {
+        try {
+            const rr = await fetch(cands[i] + '?nocache=' + Date.now(), { cache: 'no-store' });
+            if (!rr.ok) continue;
+            const res = parseMenuPayload(await rr.text());
+            if (res) return { menu: res.menu, ts: res.ts };
+        } catch (e) {}
+    }
+    push('GitHub: файл меню не найден (проверьте адрес и что pos_riko_menu.json загружен в репозиторий)');
+    return null;
+}
+
+async function refreshMenuCore(diag) {
+    const push = (s) => { if (diag) diag.push(s); };
+    try {
+        const lr = await fetch('menu.json?t=' + Date.now(), { cache: 'no-store' });
+        if (lr.ok) {
+            const lmenu = JSON.parse(await lr.text());
+            if (Array.isArray(lmenu) && lmenu.length) {
+                MENU = lmenu; lsSet('pos_riko_menu_remote', JSON.stringify(lmenu)); renderMenu();
+                toast('Меню обновлено с сервера ✅ (' + Math.round(JSON.stringify(lmenu).length / 1024) + ' КБ)');
+                return 'ok';
+            }
+        }
+        push('локальный сервер: menu.json не найден (это нормально)');
+    } catch (e) { push('локальный сервер: не используется (это нормально)'); }
+    const gh = await fetchGhMenu(diag);
+    const cmd = await fetchMenuFromCommands(diag);
+    let win = null, src = '';
+    if (gh && cmd) {
+        if ((cmd.ts || 0) > (gh.ts || 0)) { win = cmd; src = 'интернет-хранилища бота'; }
+        else { win = gh; src = 'GitHub'; }
+    } else if (gh) { win = gh; src = 'GitHub'; }
+    else if (cmd) { win = cmd; src = 'интернет-хранилища бота'; }
+    if (win) {
+        const m = mergeBackImages(win.menu);
+        if (JSON.stringify(m) !== JSON.stringify(MENU)) {
+            MENU = m; lsSet('pos_riko_menu_remote', JSON.stringify(m)); renderMenu();
+            toast('Меню обновлено из ' + src + ' ✅ (' + Math.round(JSON.stringify(m).length / 1024) + ' КБ)');
+        } else {
+            toast('Меню актуально ✅');
+        }
+        return 'ok';
+    }
+    return null;
+}
+
 function menuCmdHash(s) {
     let h = 0;
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 1000000007;
     return h;
+}
+function mergeBackImages(menu) {
+    try {
+        const cached = JSON.parse(lsGet('pos_riko_menu_remote') || 'null');
+        if (!Array.isArray(cached)) return menu;
+        const imgMap = {};
+        const collect = (items) => (items || []).forEach(it => { if (it && it.id && it.img) imgMap[it.id] = it.img; });
+        cached.forEach(cat => { collect(cat.items); (cat.subs || []).forEach(s => collect(s.items)); });
+        const put = (items) => (items || []).forEach(it => { if (it && it.id && !it.img && imgMap[it.id]) it.img = imgMap[it.id]; });
+        menu.forEach(cat => { put(cat.items); (cat.subs || []).forEach(s => put(s.items)); });
+    } catch (e) {}
+    return menu;
 }
 async function fetchMenuFromCommands() {
     if (!tgToken()) return null;
@@ -712,81 +754,58 @@ async function fetchMenuFromCommands() {
     if (String(menuCmdHash(json)) !== String(mm[2])) return null;
     try {
         const data = JSON.parse(json);
-        if (Array.isArray(data) && data.length) return data;
+        if (Array.isArray(data) && data.length) return { menu: data, ts: parseInt(mm[3], 10) || 0 };
     } catch (e) {}
     return null;
 }
 async function checkMenuNow() {
     if (!tgToken() || !tgChat()) return toast('Сначала заполните и сохраните настройки', true);
     toast('Проверяю меню…');
+    const diag = [];
     try {
-        const lr = await fetch('menu.json?t=' + Date.now(), { cache: 'no-store' });
-        if (lr.ok) {
-            const lmenu = JSON.parse(await lr.text());
-            if (Array.isArray(lmenu) && lmenu.length) {
-                MENU = lmenu; lsSet('pos_riko_menu_remote', JSON.stringify(lmenu)); renderMenu();
-                toast('Меню обновлено с сервера ✅ (' + Math.round(JSON.stringify(lmenu).length / 1024) + ' КБ)');
-                return;
-            }
-        }
-    } catch (e) {}
-    const cmdMenu2 = await fetchMenuFromCommands();
-    if (cmdMenu2) {
-        if (JSON.stringify(cmdMenu2) !== JSON.stringify(MENU)) {
-            MENU = cmdMenu2; lsSet('pos_riko_menu_remote', JSON.stringify(cmdMenu2)); renderMenu();
-            toast('Меню обновлено из интернета ✅ (' + Math.round(JSON.stringify(cmdMenu2).length / 1024) + ' КБ)');
-        } else {
-            toast('Меню актуально ✅');
-        }
-        return;
-    }
-    const rawCfg2 = CONFIG.MENU_RAW_URL && CONFIG.MENU_RAW_URL !== '__MENU_RAW_URL__' && CONFIG.MENU_RAW_URL.indexOf('https') === 0 ? CONFIG.MENU_RAW_URL : '';
-    const rawUrl2 = rawCfg2 || (cfgGet().rawUrl || '');
-    if (rawUrl2) {
-        try {
-            const rr = await fetch(rawUrl2 + '?t=' + Date.now());
-            if (rr.ok) {
-                const gmenu = JSON.parse(await rr.text());
-                if (Array.isArray(gmenu) && gmenu.length) {
-                    MENU = gmenu; lsSet('pos_riko_menu_remote', JSON.stringify(gmenu)); renderMenu();
-                    toast('Меню обновлено из интернета ✅ (' + Math.round(JSON.stringify(gmenu).length / 1024) + ' КБ)');
-                    return;
-                }
-            }
-        } catch (e) {}
-        toast('Интернет-хранилище недоступно, проверяю дальше…', true);
-    }
+        const mr = await fetch('https://api.telegram.org/bot' + tgToken().trim() + '/getMe');
+        const md = await mr.json();
+        if (md.ok) diag.push('бот: @' + md.result.username);
+        else diag.push('токен: Telegram не принял (' + (md.description || '?') + ')');
+    } catch (e) { diag.push('токен: нет связи с Telegram'); }
+    const ok = await refreshMenuCore(diag);
+    if (ok) return;
     let stage = 'getChat';
     try {
         const r = await fetch('https://api.telegram.org/bot' + tgToken() + '/getChat?chat_id=' + encodeURIComponent(tgChat()));
         const d = await r.json();
         const pm = d.ok && d.result && d.result.pinned_message;
         const fid = pm && pm.document && pm.document.file_id;
-        if (!fid) { toast(d.ok ? 'В чате нет закреплённого файла меню' : 'Чат недоступен: ' + (d.description || '?'), true); return; }
+        if (!fid) {
+            diag.push(d.ok ? 'в чате нет закреплённого файла меню (опубликуйте в редакторе «☁️ Опубликовать»)' : 'чат недоступен: ' + (d.description || '?') + ' — токен/ID чата неверны или бот не добавлен в чат');
+            showDiag(diag);
+            return;
+        }
         const fn = pm.document.file_name || 'файл';
+        diag.push('закреплённый файл найден: ' + fn);
         stage = 'getFile';
         const g = await fetch('https://api.telegram.org/bot' + tgToken() + '/getFile?file_id=' + encodeURIComponent(fid));
         const gd = await g.json();
-        if (!gd.ok || !gd.result.file_path) { toast(stage + ': ' + (gd.description || '?'), true); return; }
+        if (!gd.ok || !gd.result.file_path) { diag.push('getFile: ' + (gd.description || '?') + ' — файл от другого бота? опубликуйте в редакторе ещё раз'); showDiag(diag); return; }
         stage = 'скачивание';
         const dl = await fetch('https://api.telegram.org/file/bot' + tgToken() + '/' + gd.result.file_path);
         const raw = await dl.text();
-        let data = null;
-        try { data = JSON.parse(raw); } catch (e) { toast('Скачалось, но не JSON: ' + fn, true); return; }
-        if (Array.isArray(data) && data.length) {
-            MENU = data; lsSet('pos_riko_menu_remote', JSON.stringify(data)); renderMenu();
-            toast('Меню обновлено ✅ (полная версия ' + fn + ', ' + Math.round(raw.length / 1024) + ' КБ)');
+        const res = parseMenuPayload(raw);
+        if (res) {
+            MENU = mergeBackImages(res.menu); lsSet('pos_riko_menu_remote', JSON.stringify(MENU)); renderMenu();
+            toast('Меню обновлено ✅ (' + fn + ', ' + Math.round(raw.length / 1024) + ' КБ)');
             return;
         }
-        if (data && Array.isArray(data.items) && data.items.length) {
-            MENU = data.items; lsSet('pos_riko_menu_light', JSON.stringify(data)); renderMenu();
-            toast('Меню обновлено ✅ (лёгкая версия ' + fn + ', ' + Math.round(raw.length / 1024) + ' КБ)');
-            return;
-        }
-        toast('Файл скачался, но формат не распознан: ' + fn, true);
+        diag.push('файл скачался, но формат не распознан');
+        showDiag(diag);
     } catch (e) {
-        toast('Не получилось (этап ' + stage + '): ' + (e.message || 'нет связи'), true);
+        diag.push('этап «' + stage + '»: ' + (e.message || 'нет связи'));
+        showDiag(diag);
     }
+}
+function showDiag(diag) {
+    const lines = diag.length ? diag.map((s, i) => (i + 1) + '. ' + s).join('\n') : 'причин не найдено';
+    alert('Почему меню не обновилось:\n\n' + lines + '\n\nПришлите этот текст разработчику — он скажет точное решение.');
 }
 function openSetup() {
     const c = cfgGet();
@@ -841,6 +860,7 @@ async function saveSetup() {
     renderCart();
     fetchRemoteMenu();
 })();
+
 </script>
 
 </body>
