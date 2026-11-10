@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Кухня RIKO</title>
+<style>
+:root { --green:#0a3a32; --green-dark:#082e27; --gold:#bfa24e; --danger:#d32f2f; }
+* { box-sizing: border-box; }
+body { font-family: sans-serif; background: var(--green-dark); color: #fff; margin: 0; padding: 14px; }
+h1 { text-align: center; color: #fff; margin: 0 0 8px; font-size: 1.4rem; }
+.badge { background: var(--gold); color: #082e27; border-radius: 999px; padding: 4px 12px; font-size: .9rem; margin-left: 8px; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+.bar { display: flex; gap: 12px; align-items: center; justify-content: center; margin-bottom: 12px; flex-wrap: wrap; }
+.bar button { padding: 9px 14px; border-radius: 10px; border: 1px solid var(--gold); background: var(--green); color: #fff; font-weight: bold; cursor: pointer; }
+.chk { font-size: .95rem; opacity: .95; }
+.sync { font-size: .8rem; opacity: .65; }
+.banner { background: var(--danger); color: #fff; text-align: center; padding: 8px; border-radius: 10px; margin-bottom: 10px; }
+.modechip { font-size: .8rem; border: 1px solid var(--gold); color: var(--gold); border-radius: 999px; padding: 3px 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.order { background: var(--green); border: 2px solid var(--gold); border-radius: 14px; padding: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.order.ready { opacity: .55; }
+.ohead { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.05rem; margin-bottom: 4px; }
+.ohead b { color: var(--gold); font-size: 1.15rem; }
+.owaiter { font-size: .85rem; opacity: .8; margin-bottom: 6px; }
+.line { padding: 5px 0; border-bottom: 1px dashed rgba(255,255,255,.15); font-size: .98rem; overflow: hidden; }
+.qty { color: var(--gold); font-weight: bold; margin-right: 4px; }
+.mods { opacity: .85; font-size: .85rem; }
+.price { float: right; }
+.ototal { text-align: right; margin: 8px 0 6px; font-size: 1.05rem; }
+.ostatus { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: .8rem; font-weight: bold; margin: 0 8px 8px 0; }
+.st-new { background: var(--gold); color: #082e27; animation: pulse 1s infinite; }
+.st-cooking { background: #2f6fd0; color: #fff; }
+.st-ready { background: #1e7a45; color: #fff; }
+.btn { padding: 10px 16px; border-radius: 10px; border: 1px solid var(--gold); background: var(--gold); color: #082e27; font-weight: bold; cursor: pointer; font-size: .95rem; }
+.btn.subtle { background: transparent; color: #fff; border-color: rgba(255,255,255,.4); }
+.empty { text-align: center; opacity: .75; padding: 40px 10px; font-size: 1.05rem; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #082e27; padding: 10px 18px; border-radius: 10px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 90vw; }
+#toast.show { opacity: 1; }
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 40; align-items: center; justify-content: center; padding: 16px; }
+.modal.open { display: flex; }
+.modal-box { background: #fff; color: #222; border-radius: 14px; padding: 20px; max-width: 420px; width: 100%; max-height: 85vh; overflow-y: auto; }
+.modal-box h3 { color: var(--green); margin: 0 0 10px; }
+.setup-lbl { font-size: .8rem; color: #666; display: block; text-align: left; }
+.setup-inp { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin: 4px 0 10px; font-size: 1rem; box-sizing: border-box; }
+.hint { font-size: .78rem; color: #777; line-height: 1.4; }
+.mbtn { width: 100%; padding: 13px; background: var(--green); color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 6px; }
+.mbtn2 { width: 100%; padding: 10px; background: #fff; color: #333; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>👨‍🍳 Кухня RIKO<span id="new-badge" class="badge" style="display:none"></span></h1>
+<div class="bar">
+    <button type="button" onclick="manualRefresh()">🔄 Обновить</button>
+    <label class="chk"><input type="checkbox" id="hide-ready"> скрывать готовые</label>
+    <button type="button" onclick="openSetup()">⚙️</button>
+    <span id="mode-chip" class="modechip" style="display:none"></span>
+    <span id="sync-time" class="sync"></span>
+</div>
+<div id="err-banner" class="banner" style="display:none">Нет связи. Пробую ещё раз…</div>
+<div id="grid" class="grid"></div>
+<div id="empty" class="empty">Заказов пока нет. Они появятся здесь автоматически.</div>
+<div id="toast"></div>
+
+<div class="modal" id="setup-modal">
+    <div class="modal-box">
+        <h3>Настройки кухни</h3>
+        <label class="setup-lbl" for="setup-srv">Адрес сервера повара (если запущен)</label>
+        <input type="text" id="setup-srv" class="setup-inp" placeholder="http://192.168.х.х:8080 — необязательно">
+        <label class="setup-lbl" for="setup-token">Токен бота (если сервера нет — через Telegram)</label>
+        <input type="text" id="setup-token" class="setup-inp" placeholder="1234567890:AA...">
+        <label class="setup-lbl" for="setup-chat">ID чата кухни</label>
+        <input type="text" id="setup-chat" class="setup-inp" placeholder="-1001234567890">
+        <p class="hint">Если указан сервер — заказы берутся с него (статусы общие для всех). Если сервера нет — заказы берутся из Telegram-чата кухни: нужен токен бота и ID того же чата, что в POS. В Telegram-режиме статусы хранятся только на этом устройстве.</p>
+        <button type="button" class="mbtn" onclick="saveSetup()">Сохранить и проверить</button>
+        <button type="button" class="mbtn2" onclick="closeSetup()">Закрыть</button>
+        <div class="hint" style="margin-top:8px">Кухня RIKO v56</div>
+    </div>
+</div>
+
+<script>
+const LS_CFG = 'pos_riko_kitchen_cfg';
+const LS_STATUS = 'pos_riko_kitchen_status';
+let kcfg = loadCfg();
+let mode = null;
+let srvBase = null;
+let orders = [];
+let seen = {};
+let tgOffset = null;
+let tgLoopOn = false;
+let beeper = null;
+let firstLoad = true;
+
+function loadCfg() { try { return JSON.parse(localStorage.getItem(LS_CFG)) || {}; } catch (e) { return {}; } }
+function saveCfg() { try { localStorage.setItem(LS_CFG, JSON.stringify(kcfg)); } catch (e) {} }
+function stMap() { try { return JSON.parse(localStorage.getItem(LS_STATUS)) || {}; } catch (e) { return {}; } }
+function saveStMap(m) { try { localStorage.setItem(LS_STATUS, JSON.stringify(m)); } catch (e) {} }
+
+function fmt(n) { return Number(n).toFixed(2).replace('.', ','); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'show';
+    clearTimeout(t._h); t._h = setTimeout(() => t.className = '', 2500);
+}
+function beep() {
+    try {
+        beeper = beeper || new (window.AudioContext || window.webkitAudioContext)();
+        const o = beeper.createOscillator(); const g = beeper.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(beeper.destination);
+        g.gain.setValueAtTime(0.25, beeper.currentTime);
+        o.start(); g.gain.exponentialRampToValueAtTime(0.001, beeper.currentTime + 0.4);
+        o.stop(beeper.currentTime + 0.45);
+    } catch (e) {}
+}
+function buzz() { try { if (navigator.vibrate) navigator.vibrate(250); } catch (e) {} }
+
+function todayKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+async function detectMode() {
+    if (location.protocol.indexOf('http') === 0) {
+        try {
+            const r = await fetch('orders', { cache: 'no-store' });
+            if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.orders)) { srvBase = ''; mode = 'server'; return; } }
+        } catch (e) {}
+    }
+    const su = String(kcfg.serverUrl || '').trim().replace(/\/+$/, '');
+    if (su) {
+        try {
+            const r = await fetch(su + '/orders', { cache: 'no-store' });
+            if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.orders)) { srvBase = su; mode = 'server'; return; } }
+        } catch (e) {}
+    }
+    if ((kcfg.token || '').trim() && (kcfg.chatId || '').trim()) { mode = 'telegram'; return; }
+    mode = null;
+    openSetup();
+    showBanner('Укажите адрес сервера или токен бота в настройках (⚙️)');
+}
+
+function chip() {
+    const c = document.getElementById('mode-chip');
+    if (!mode) { c.style.display = 'none'; return; }
+    c.style.display = 'inline-block';
+    c.textContent = mode === 'server' ? 'режим: сервер' : 'режим: Telegram';
+}
+function showBanner(msg) {
+    const b = document.getElementById('err-banner');
+    b.textContent = msg;
+    b.style.display = 'block';
+}
+function hideBanner() { document.getElementById('err-banner').style.display = 'none'; }
+
+async function pollServer(manual) {
+    try {
+        const r = await fetch(srvBase + '/orders', { cache: 'no-store' });
+        if (!r.ok) throw new Error('код ' + r.status);
+        const d = await r.json();
+        orders = d.orders || [];
+        let fresh = 0;
+        if (!firstLoad) orders.forEach(o => { if (!seen[o.ts]) fresh++; });
+        orders.forEach(o => { seen[o.ts] = 1; });
+        firstLoad = false;
+        hideBanner();
+        document.getElementById('sync-time').textContent = 'обновлено ' + new Date().toLocaleTimeString('ru-RU');
+        if (fresh) { beep(); buzz(); if (!manual) showToast('Новых заказов: ' + fresh); }
+        render();
+    } catch (e) {
+        showBanner('Нет связи с сервером. Пробую ещё раз…');
+    }
+}
+
+function parseOrderText(text) {
+    try {
+        if (text.indexOf('НОВЫЙ ЗАКАЗ') === -1) return null;
+        const num = (text.match(/НОВЫЙ ЗАКАЗ #(\d+)/) || [])[1];
+        if (!num) return null;
+        const table = (((text.match(/📋 Стол: (.+)/) || [])[1]) || '').trim();
+        const time = (((text.match(/🕒 (\d{1,2}:\d{2})/) || [])[1]) || '').trim();
+        const waiter = (((text.match(/👤 (.+)/) || [])[1]) || '').trim();
+        const total = parseFloat((((text.match(/Итого:\s*([\d,]+)/) || [])[1] || '0').replace(',', '.'))) || 0;
+        const lines = [];
+        const lineRe = /(?:^|\n)\s*(\d+)\.\s+([^\n]+)/g;
+        let m;
+        while ((m = lineRe.exec(text)) !== null) {
+            let body = m[2];
+            let lt = null;
+            const pm = body.match(/\s+—\s+([\d,]+)\s*BYN\s*$/);
+            if (pm) { lt = parseFloat(pm[1].replace(',', '.')) || 0; body = body.slice(0, body.length - pm[0].length); }
+            let qty = 1;
+            const qm = body.match(/\s*×\s*(\d+)\s*$/);
+            if (qm) { qty = parseInt(qm[1], 10); body = body.replace(/\s*×\s*\d+\s*$/, ''); }
+            let mods = [];
+            const mm = body.match(/\s*\[(.+)\]\s*$/);
+            if (mm) { mods = mm[1].split(',').map(s => s.trim()); body = body.replace(/\s*\[(.+)\]\s*$/, ''); }
+            let opt = '';
+            const om = body.match(/\s*\(([^()]+)\)\s*$/);
+            if (om) { opt = om[1].trim(); body = body.replace(/\s*\(([^()]+)\)\s*$/, ''); }
+            lines.push({ name: body.trim(), opt: opt, mods: mods, qty: qty, price: lt || 0, lt: lt });
+        }
+        if (!lines.length) return null;
+        return { no: parseInt(num, 10), table: table, time: time, waiter: waiter, total: total, lines: lines, status: 'new', src: 'telegram' };
+    } catch (e) { return null; }
+}
+
+function handleUpdate(u) {
+    const msg = u.message || u.channel_post;
+    if (!msg || !msg.text) return;
+    const chatId = msg.chat ? String(msg.chat.id) : '';
+    if (kcfg.chatId && String(kcfg.chatId).trim() && chatId !== String(kcfg.chatId).trim()) return;
+    if (msg.text.indexOf('НОВЫЙ ЗАКАЗ') === -1) return;
+    const o = parseOrderText(msg.text);
+    if (!o) return;
+    const d = new Date(msg.date * 1000);
+    o.day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    if (o.day !== todayKey()) return;
+    o.ts = msg.date * 1000;
+    const st = stMap();
+    if (st['k' + o.ts]) o.status = st['k' + o.ts];
+    if (st['del' + o.ts]) return;
+    orders = orders.filter(x => x.ts !== o.ts);
+    orders.unshift(o);
+    orders.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    if (!seen[o.ts]) { beep(); buzz(); showToast('Новый заказ #' + o.no); }
+    seen[o.ts] = 1;
+}
+
+async function tgLoop() {
+    if (mode !== 'telegram' || tgLoopOn) return;
+    tgLoopOn = true;
+    while (mode === 'telegram') {
+        try {
+            const off = (tgOffset == null || tgOffset === 0) ? '' : ('&offset=' + tgOffset);
+            const r = await fetch('https://api.telegram.org/bot' + kcfg.token.trim() + '/getUpdates?timeout=25' + off, { cache: 'no-store' });
+            const d = await r.json();
+            if (!d.ok) throw new Error(d.description || 'Telegram отказал');
+            const ups = d.result || [];
+            ups.forEach(handleUpdate);
+            if (ups.length) {
+                const maxId = Math.max.apply(null, ups.map(u => u.update_id));
+                tgOffset = (tgOffset == null || tgOffset === 0) ? maxId + 1 : Math.max(tgOffset, maxId + 1);
+                hideBanner();
+                document.getElementById('sync-time').textContent = 'обновлено ' + new Date().toLocaleTimeString('ru-RU');
+                render();
+            } else if (tgOffset == null) {
+                tgOffset = 0;
+                hideBanner();
+                document.getElementById('sync-time').textContent = 'обновлено ' + new Date().toLocaleTimeString('ru-RU');
+                render();
+            } else {
+                await new Promise(res => setTimeout(res, 2500));
+            }
+        } catch (e) {
+            showBanner('Telegram: нет связи (' + (e.message || 'ошибка') + '). Пробую ещё…');
+            await new Promise(res => setTimeout(res, 3000));
+        }
+    }
+    tgLoopOn = false;
+}
+
+async function manualRefresh() {
+    if (mode === 'server') await pollServer(true);
+    else if (mode === 'telegram') { render(); showToast('Заказы приходят из Telegram автоматически'); }
+    else { await detectMode(); chip(); if (mode === 'server') pollServer(true); if (mode === 'telegram') tgLoop(); }
+}
+
+async function setStatus(ts, st) {
+    const o = orders.find(x => x.ts === ts);
+    if (!o) return;
+    if (mode === 'server') {
+        try {
+            const r = await fetch(srvBase + '/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ no: o.no, ts: ts, status: st }) });
+            if (!r.ok) throw new Error('код ' + r.status);
+            await pollServer(true);
+        } catch (e) { showToast('Не удалось изменить статус — нет связи с сервером'); }
+    } else {
+        const m = stMap();
+        m['k' + o.ts] = st;
+        saveStMap(m);
+        o.status = st;
+        render();
+    }
+}
+async function delOrder(ts) {
+    const o = orders.find(x => x.ts === ts);
+    if (!o) return;
+    if (!confirm('Убрать заказ #' + o.no + ' с экрана?')) return;
+    if (mode === 'server') {
+        try {
+            const r = await fetch(srvBase + '/order-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ no: o.no, ts: ts }) });
+            if (!r.ok) throw new Error('код ' + r.status);
+            await pollServer(true);
+        } catch (e) { showToast('Не удалось — нет связи с сервером'); }
+    } else {
+        const m = stMap();
+        m['del' + o.ts] = 1;
+        saveStMap(m);
+        orders = orders.filter(x => x.ts !== ts);
+        render();
+    }
+}
+
+function render() {
+    const hideReady = document.getElementById('hide-ready').checked;
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    const shown = orders.filter(o => !(hideReady && o.status === 'ready'));
+    const freshCount = orders.filter(o => o.status === 'new').length;
+    const badge = document.getElementById('new-badge');
+    badge.style.display = freshCount ? 'inline-block' : 'none';
+    badge.textContent = 'новых: ' + freshCount;
+    document.getElementById('empty').style.display = shown.length ? 'none' : 'block';
+    shown.forEach(o => {
+        const st = o.status || 'new';
+        const card = document.createElement('div');
+        card.className = 'order ' + st;
+        const lines = (o.lines || []).map(l => {
+            const opt = l.opt ? ' (' + esc(l.opt) + ')' : '';
+            const mods = (l.mods && l.mods.length) ? ' <span class="mods">[' + l.mods.map(esc).join(', ') + ']</span>' : '';
+            const pricePart = (l.lt != null ? fmt(l.lt) : (l.price ? fmt(l.price * l.qty) : ''));
+            return '<div class="line"><span class="qty">' + l.qty + ' ×</span> ' + esc(l.name) + opt + mods + (pricePart ? ' <span class="price">' + pricePart + '</span>' : '') + '</div>';
+        }).join('');
+        const statusLabel = st === 'cooking' ? 'В РАБОТЕ' : (st === 'ready' ? 'ГОТОВО' : 'НОВЫЙ');
+        const btn = st === 'new'
+            ? '<button type="button" class="btn" onclick="setStatus(' + o.ts + ', \'cooking\')">▶ В работу</button>'
+            : (st === 'cooking'
+                ? '<button type="button" class="btn" onclick="setStatus(' + o.ts + ', \'ready\')">✓ Готово</button>'
+                : '<button type="button" class="btn subtle" onclick="delOrder(' + o.ts + ')">🗑 Убрать</button>');
+        card.innerHTML =
+            '<div class="ohead"><b>Заказ #' + esc(o.no) + '</b><span>' + esc(o.table || '') + ' · ' + esc(o.time || '') + '</span></div>' +
+            (o.waiter ? '<div class="owaiter">👤 ' + esc(o.waiter) + '</div>' : '') +
+            '<div class="olines">' + lines + '</div>' +
+            '<div class="ototal">Итого: <b>' + fmt(o.total) + ' BYN</b></div>' +
+            '<div class="ostatus st-' + st + '">' + statusLabel + '</div>' + btn;
+        grid.appendChild(card);
+    });
+}
+
+function openSetup() {
+    document.getElementById('setup-srv').value = kcfg.serverUrl || '';
+    document.getElementById('setup-token').value = kcfg.token || '';
+    document.getElementById('setup-chat').value = kcfg.chatId || '';
+    document.getElementById('setup-modal').classList.add('open');
+}
+function closeSetup() { document.getElementById('setup-modal').classList.remove('open'); }
+async function saveSetup() {
+    kcfg.serverUrl = document.getElementById('setup-srv').value.trim();
+    kcfg.token = document.getElementById('setup-token').value.trim();
+    kcfg.chatId = document.getElementById('setup-chat').value.trim();
+    if (!kcfg.serverUrl && !(kcfg.token && kcfg.chatId)) {
+        showToast('Укажите адрес сервера или токен и ID чата');
+        return;
+    }
+    saveCfg();
+    closeSetup();
+    showToast('Сохранено, проверяю связь…');
+    mode = null; srvBase = null; firstLoad = true;
+    await detectMode();
+    chip();
+    if (mode === 'server') { showToast('Связь с сервером есть ✅'); pollServer(true); }
+    else if (mode === 'telegram') {
+        try {
+            const r = await fetch('https://api.telegram.org/bot' + kcfg.token.trim() + '/getMe');
+            const d = await r.json();
+            if (!d.ok) throw new Error(d.description || 'токен не принят');
+            showToast('Telegram подключён: @' + d.result.username + ' ✅');
+            tgLoop();
+        } catch (e) {
+            showToast('Токен не принят: ' + (e.message || 'нет связи'));
+            openSetup();
+        }
+    }
+}
+
+document.getElementById('hide-ready').onchange = render;
+(async function init() {
+    await detectMode();
+    chip();
+    if (mode === 'server') { pollServer(true); setInterval(pollServer, 3000); }
+    if (mode === 'telegram') tgLoop();
+})();
+</script>
+</body>
+</html>
