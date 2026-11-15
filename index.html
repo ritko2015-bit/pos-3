@@ -270,7 +270,7 @@
         <button type="button" class="modal-close" onclick="checkMenuNow()">🔄 Проверить обновления меню</button>
         <button type="button" class="modal-add" id="btn-logout" style="width:100%;display:none" onclick="switchWaiter()">🚪 Сменить официанта</button>
         <button type="button" class="modal-close" onclick="closeSetup()">Работать без связи (офлайн)</button>
-        <div class="hint" style="margin-top:10px">Сборка POS v64 от 12.11.2026</div>
+        <div class="hint" style="margin-top:10px">Сборка POS v65 от 15.11.2026</div>
     </div>
 </div>
 <div class="modal" id="item-modal" onclick="if (event.target === this) closeModal()">
@@ -359,7 +359,7 @@ function addToCart(item, opt, modNames, qty) {
     const basePrice = opt ? opt.price : item.price;
     const existing = cart.find(c => c.key === key);
     if (existing) existing.qty += q;
-    else cart.push({ key, id: item.id, name: item.name, optLabel: opt ? opt.label : '', basePrice, mods, qty: q });
+    else cart.push({ key, id: item.id, name: item.name, optLabel: opt ? opt.label : '', basePrice, mods, qty: q, station: item.station || '' });
     renderCart();
 }
 function changeQty(index, delta) { cart[index].qty += delta; if (cart[index].qty <= 0) cart.splice(index, 1); renderCart(); }
@@ -883,7 +883,7 @@ async function sendOrder() {
     const total = cart.reduce((s, l) => s + lineTotal(l), 0);
     const payload = {
         no: orderCounter, time: time, table: table, waiter: waiterName(),
-        lines: cart.map(l => ({ name: l.name, opt: l.optLabel || '', mods: l.mods.map(m => m.name), qty: l.qty, price: l.basePrice + l.mods.reduce((s, m) => s + m.price, 0) })),
+        lines: cart.map(l => ({ name: l.name, opt: l.optLabel || '', mods: l.mods.map(m => m.name), qty: l.qty, price: l.basePrice + l.mods.reduce((s, m) => s + m.price, 0), station: l.station || '' })),
         total: total
     };
     let srvOk = false;
