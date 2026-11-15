@@ -4,6 +4,13 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="pos-manifest.json">
+    <meta name="theme-color" content="#082e27">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="POS RIKO">
+    <link rel="apple-touch-icon" href="pos-icon-192.png">
 <title>POS RIKO — Официант</title>
 <style>
     :root {
@@ -133,6 +140,40 @@
         .cart-panel { flex: none; max-height: 45vh; position: sticky; bottom: 0; z-index: 10; }
         .search { min-width: 0; width: 100%; margin-left: 0; }
     }
+    .orders-panel { margin-bottom: 12px; }
+    .order-row { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid #e2e6e4;
+        border-radius: var(--radius); padding: 10px 14px; margin-bottom: 8px; flex-wrap: wrap; }
+    .order-row.ready { border-color: var(--gold); box-shadow: 0 2px 10px rgba(191,162,78,.3); }
+    .order-row .ono { font-weight: bold; color: var(--green); font-size: 1.1rem; }
+    .order-row .ost { font-size: .92rem; color: #666; }
+    .order-row.ready .ost { color: #b8860b; font-weight: bold; }
+    .order-row .ototal { font-weight: bold; color: var(--green); margin-left: auto; }
+    .btn-serve { padding: 8px 16px; background: var(--gold); color: #fff; border: none;
+        border-radius: var(--radius); font-weight: bold; cursor: pointer; }
+    .btn-pay { padding: 8px 16px; background: var(--green); color: #fff; border: none;
+        border-radius: var(--radius); font-weight: bold; cursor: pointer; }
+    .cat-count { display: block; margin-top: 4px; font-size: .95rem; font-weight: bold; color: rgba(255,255,255,.85); }
+    .toolbar button.has-ready { background: var(--gold); color: #fff; border-color: var(--gold); }
+    .ono.lnk { cursor: pointer; border-bottom: 2px dotted var(--gold); }
+    .waiter-chip { font-weight: bold; color: var(--green); background: #fff; border: 1px solid #e2e6e4;
+        border-radius: 999px; padding: 6px 12px; font-size: .95rem; }
+    .login-user { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--green); background: #fff;
+        color: var(--green); font-weight: bold; cursor: pointer; margin: 4px 6px 4px 0; font-size: 1.05rem; }
+    .login-user.sel { background: var(--green); color: #fff; }
+    .order-detail { background: #fff; border: 1px solid #e2e6e4; border-radius: var(--radius); padding: 14px; }
+    .od-line { padding: 6px 0; border-bottom: 1px dashed #e2e6e4; }
+    .od-qty { color: var(--gold); font-weight: 900; margin-right: 4px; }
+    .od-opt { color: #666; }
+    .od-mods { color: #666; font-size: .9rem; }
+    .od-lines { margin: 10px 0; }
+    .od-total { margin: 10px 0; font-size: 1.15rem; }
+    .pay-total { font-size: 1.2rem; margin: 8px 0; }
+    .pay-cash { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    .pay-cash button { padding: 10px 16px; font-size: 1.1rem; font-weight: bold; border: 1px solid var(--green);
+        background: #fff; color: var(--green); border-radius: var(--radius); cursor: pointer; }
+    .pay-cash button:hover { background: var(--green); color: #fff; }
+    .pay-change { font-size: 2.1rem; font-weight: 900; color: var(--green); margin: 12px 0; text-align: center; }
+    .pay-change.lack { color: var(--danger); font-size: 1.2rem; }
 </style>
 </head>
 <body>
@@ -152,8 +193,8 @@
 
 <div class="toolbar">
     <label for="table-select">Стол:</label>
-    <select id="table-select"></select>
-    <button type="button" onclick="openLog()">📜 Журнал заказов</button>
+    <select id="table-select"></select><span id="waiter-chip" class="waiter-chip"></span>
+    <button type="button" onclick="openLogView()" id="log-btn">📜 Журнал заказов</button>
     <button type="button" onclick="openKitchen()">👨‍🍳 Кухня</button>
     <button type="button" onclick="openSetup()">⚙️ Настройки</button>
     <input type="text" class="search" id="menu-search" placeholder="🔍 Поиск по меню…">
@@ -172,17 +213,49 @@
             <div class="total">Итого: <span id="cart-total">0,00</span> BYN</div>
             <button class="send" id="send-btn" onclick="sendOrder()">Отправить на кухню</button>
         </div>
+        <div id="order-detail" style="display:none"></div>
     </div>
 </div>
 
 <div class="log-panel" id="log-panel" onclick="if (event.target === this) closeLog()">
     <div class="log-box">
-        <h2>Отправленные заказы</h2>
+        <h2>Журнал заказов</h2>
+        <div id="journal-orders"></div>
+        <h3 style="margin:14px 0 8px; font-size:1.05rem; color:var(--green); border-top:1px solid #e2e6e4; padding-top:10px;">История отправленных</h3>
         <div id="log-entries"></div>
         <button class="log-close" onclick="closeLog()">Закрыть</button>
     </div>
 </div>
 
+<div class="modal" id="login-modal">
+    <div class="modal-box" style="max-width:360px;text-align:left">
+        <h3>Вход для официанта</h3>
+        <div id="login-list"></div>
+        <label class="setup-lbl" for="login-pass">Пароль</label>
+        <input type="password" id="login-pass" class="setup-inp" onkeydown="if (event.key === 'Enter') tryLogin()">
+        <button type="button" class="modal-add" style="width:100%" onclick="tryLogin()">Войти</button>
+        <div id="login-err" style="color:var(--danger);font-weight:bold;margin-top:8px;display:none">Неверный пароль</div>
+    </div>
+</div>
+<div class="modal" id="pay-modal" onclick="if (event.target === this) closePay()">
+    <div class="modal-box" style="max-width:420px;text-align:left">
+        <h3 id="pay-title">Оплата заказа</h3>
+        <div class="pay-total">К оплате: <b id="pay-total"></b></div>
+        <label class="setup-lbl" for="pay-input">Внесено денег (BYN)</label>
+        <input type="text" id="pay-input" class="setup-inp" inputmode="decimal" placeholder="0" oninput="renderPay()">
+        <div class="pay-cash">
+            <button type="button" onclick="payAdd(5)">5</button>
+            <button type="button" onclick="payAdd(10)">10</button>
+            <button type="button" onclick="payAdd(20)">20</button>
+            <button type="button" onclick="payAdd(50)">50</button>
+            <button type="button" onclick="payAdd(100)">100</button>
+            <button type="button" onclick="payAdd(200)">200</button>
+        </div>
+        <div id="pay-change" class="pay-change">Сдача: 0,00 BYN</div>
+        <button type="button" class="modal-add" onclick="payDone()">✓ Оплата принята</button>
+        <button type="button" class="modal-close" onclick="closePay()">Отмена</button>
+    </div>
+</div>
 <div id="toast2"></div>
 
 <div class="modal" id="setup-modal">
@@ -195,8 +268,9 @@
         <input type="text" id="setup-server" class="setup-inp" placeholder="https://riko.of.by/pos.php — оставьте пустым, если POS открыт с этого же сервера">
         <button type="button" class="modal-add" onclick="saveSetup()">Сохранить и проверить</button>
         <button type="button" class="modal-close" onclick="checkMenuNow()">🔄 Проверить обновления меню</button>
+        <button type="button" class="modal-add" id="btn-logout" style="width:100%;display:none" onclick="switchWaiter()">🚪 Сменить официанта</button>
         <button type="button" class="modal-close" onclick="closeSetup()">Работать без связи (офлайн)</button>
-        <div class="hint" style="margin-top:10px">Сборка POS v59 от 03.11.2026</div>
+        <div class="hint" style="margin-top:10px">Сборка POS v64 от 12.11.2026</div>
     </div>
 </div>
 <div class="modal" id="item-modal" onclick="if (event.target === this) closeModal()">
@@ -266,7 +340,12 @@ function clearSearchBox() {
     const si = document.getElementById('menu-search');
     if (si) si.value = '';
 }
-function goRoot() { state = { view: 'root', cat: null, sub: null, search: state.search }; renderMenu(); }
+function goRoot() {
+    state = { view: 'root', cat: null, sub: null, search: state.search };
+    renderMenu();
+    const now = Date.now();
+    if (now - lastMenuCheck > 60000) { lastMenuCheck = now; refreshMenuCore(null, true); }
+}
 function openCat(catId) { clearSearchBox(); state = { view: 'cat', cat: catId, sub: null, search: '' }; renderMenu(); }
 function openSub(subId) { clearSearchBox(); state = { view: 'sub', cat: state.cat, sub: subId, search: '' }; renderMenu(); }
 
@@ -290,6 +369,21 @@ function lineTotal(line) { return (line.basePrice + line.mods.reduce((s, m) => s
 
 function renderCart() {
     const container = document.getElementById('cart-items');
+    const detail = document.getElementById('order-detail');
+    const hdr = document.querySelector('.cart-header');
+    const tb = document.querySelector('.total-block');
+    if (state.view === 'order' && currentOrder) {
+        hdr.style.display = 'none';
+        tb.style.display = 'none';
+        container.style.display = 'none';
+        detail.style.display = 'block';
+        renderOrderDetail(detail);
+        return;
+    }
+    hdr.style.display = 'flex';
+    tb.style.display = 'block';
+    container.style.display = 'block';
+    detail.style.display = 'none';
     container.innerHTML = '';
     if (!cart.length) {
         container.innerHTML = '<div class="cart-empty">Корзина пуста — выберите блюда из меню</div>';
@@ -319,12 +413,9 @@ function renderCart() {
 function itemCard(item) {
     const el = document.createElement('div');
     el.className = 'item';
-    const priceHtml = item.opts
-        ? '<span class="price">выберите вариант</span>'
-        : '<span class="price">' + fmt(item.price) + ' BYN' + (item.check ? ' <span class="chk">*</span>' : '') + '</span>';
     el.innerHTML =
         (item.img ? '<img class="item-img" src="' + item.img + '" alt="">' : '') +
-        '<strong>' + item.name + '</strong>' + priceHtml +
+        '<strong>' + item.name + '</strong>' + (item.check ? ' <span class="chk">*</span>' : '') +
         (item.desc ? '<div class="desc">' + item.desc + '</div>' : '');
 
     if (item.opts) {
@@ -432,13 +523,33 @@ function renderMenu() {
         return;
     }
 
+    if (state.view === 'log' || state.view === 'order') {
+        const nav = document.createElement('div');
+        nav.className = 'nav-bar';
+        nav.innerHTML = '<button type="button" class="btn-back" onclick="goRoot()">← Назад к меню</button><div class="crumbs"><b>Журнал заказов</b></div>';
+        container.appendChild(nav);
+        const jp = document.createElement('div');
+        jp.id = 'journal-inline';
+        renderOrdersPanel(jp);
+        if (!jp.children.length) jp.innerHTML = '<div class="cart-empty">Активных заказов нет</div>';
+        container.appendChild(jp);
+        const log = JSON.parse(lsGet('pos_riko_log') || '[]');
+        const hist = document.createElement('div');
+        hist.innerHTML = '<h3 style="margin:16px 0 8px;font-size:1.05rem;color:var(--green)">История отправленных</h3>' + (log.length
+            ? log.map(e => '<div class="log-entry"><b>#' + e.no + '</b> — ' + e.time + ', ' + e.table + (e.via ? ' · ' + e.via : '') + '<br>' + e.count + ' поз. на ' + fmt(e.total) + ' BYN</div>').join('')
+            : '<div class="cart-empty">Пока пусто</div>');
+        container.appendChild(hist);
+        return;
+    }
+
     if (state.view === 'root') {
         const grid = document.createElement('div');
         grid.className = 'grid-cats';
         MENU.forEach(cat => {
             const tile = document.createElement('div');
             tile.className = 'cat-tile';
-            tile.innerHTML = '<span class="icon">' + (cat.icon || '🍽️') + '</span>' + cat.name;
+            tile.innerHTML = '<span class="icon">' + (cat.icon || '🍽️') + '</span>' + cat.name +
+                '<span class="cat-count">' + catCount(cat) + ' наименований</span>';
             tile.onclick = () => openCat(cat.id);
             grid.appendChild(tile);
         });
@@ -491,6 +602,266 @@ function serverBase() {
     return (location.protocol.indexOf('http') === 0) ? '' : null;
 }
 function serverReady() { return serverBase() !== null; }
+// --- СТАТУСЫ ЗАКАЗОВ И ОПЛАТА ---
+let activeOrders = [];
+let WAITERS = [];
+let loggedIn = false;
+let currentOrder = null;
+let lastMenuCheck = 0;
+let payNo = null, payTotal = 0;
+async function pollOrders() {
+    if (!serverReady()) return;
+    try {
+        const r = await fetch(srvApi(serverBase(), 'orders'), { cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json();
+        const bills0 = JSON.parse(lsGet('pos_riko_bills') || '{}');
+        activeOrders = (d.orders || []).filter(o => (o.status || 'new') !== 'done' || bills0[o.no]);
+        const readyKey = activeOrders.filter(o => (o.status || 'new') === 'ready').map(o => o.no).join(',');
+        if (readyKey !== lastReady) {
+            const added = readyKey ? readyKey.split(',').filter(x => lastReady.split(',').indexOf(x) < 0) : [];
+            lastReady = readyKey;
+            if (added.length) { playReadyBeep(); toast('Заказ #' + added.join(', #') + ' готов — загляните в журнал 📜'); }
+        }
+        if (document.getElementById('log-panel') && document.getElementById('log-panel').classList.contains('open')) renderJournal();
+        updateLogBadge();
+        if (state.view === 'root') renderMenu();
+        if (state.view === 'log') renderMenu();
+        if (state.view === 'order') renderCart();
+    } catch (e) {}
+}
+function catCount(cat) {
+    let n = (cat.items || []).length;
+    (cat.subs || []).forEach(s => { n += (s.items || []).length; });
+    return n;
+}
+function renderOrdersPanel(container) {
+    if (!activeOrders.length) return;
+    const bills = JSON.parse(lsGet('pos_riko_bills') || '{}');
+    const wrap = document.createElement('div');
+    wrap.className = 'orders-panel';
+    activeOrders.forEach(o => {
+        const st = o.status || 'new';
+        if (st === 'done' && !bills[o.no]) return;
+        const stTxt = st === 'new' ? 'принят на кухне' : (st === 'cooking' ? 'готовится' : 'ГОТОВО — можно забирать');
+        const row = document.createElement('div');
+        row.className = 'order-row' + (st === 'ready' ? ' ready' : '');
+        let html = '<span class="ono lnk" onclick="openOrder(' + o.no + ', ' + (o.ts || 0) + ')">Заказ #' + o.no + '</span>' +
+            '<span>Стол ' + (o.table || '—') + '</span>' +
+            '<span class="ost">' + stTxt + '</span>' +
+            '<span class="ototal">' + fmt(o.total || 0) + ' BYN</span>';
+        if (bills[o.no]) {
+            html += '<button type="button" class="btn-pay" onclick="openPay(' + o.no + ', ' + (o.ts || 0) + ')">💵 Оплата</button>';
+        } else if (st === 'ready') {
+            html += '<button type="button" class="btn-serve" onclick="serveOrder(' + o.no + ', ' + (o.ts || 0) + ')">✓ Заказ собран</button>';
+        }
+        row.innerHTML = html;
+        wrap.appendChild(row);
+    });
+    container.appendChild(wrap);
+}
+function hashPass(s) {
+    let h = 2166136261;
+    s = String(s || '');
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(16).padStart(8, '0');
+}
+let selWaiter = -1;
+function showLogin() {
+    selWaiter = -1;
+    const list = document.getElementById('login-list');
+    list.innerHTML = WAITERS.map((w, i) => '<button type="button" class="login-user" onclick="pickWaiter(' + i + ')">' + esc(w.name) + '</button>').join('');
+    document.getElementById('login-pass').value = '';
+    document.getElementById('login-err').style.display = 'none';
+    document.getElementById('login-modal').classList.add('open');
+}
+function pickWaiter(i) {
+    selWaiter = i;
+    document.querySelectorAll('#login-list .login-user').forEach((b, j) => b.classList.toggle('sel', j === selWaiter));
+    setTimeout(() => { const p = document.getElementById('login-pass'); if (p) p.focus(); }, 60);
+}
+function loginErr(msg) {
+    const e = document.getElementById('login-err');
+    e.textContent = msg; e.style.display = 'block';
+}
+function tryLogin() {
+    if (selWaiter < 0) { loginErr('Выберите официанта'); return; }
+    const w = WAITERS[selWaiter];
+    if (hashPass(document.getElementById('login-pass').value) !== (w.hash || '')) { loginErr('Неверный пароль'); return; }
+    document.getElementById('login-modal').classList.remove('open');
+    loggedIn = true;
+    const c = cfgGet();
+    lsSet('pos_riko_cfg', JSON.stringify({ token: c.token || '', chat: c.chat || '', waiter: w.name, rawUrl: '', serverUrl: c.serverUrl || '' }));
+    updateConfigWarning();
+    updateWaiterChip();
+    toast('Добро пожаловать, ' + w.name + '! 👋');
+}
+function switchWaiter() {
+    closeSetup();
+    loggedIn = false;
+    showLogin();
+}
+function updateWaiterChip() {
+    const chip = document.getElementById('waiter-chip');
+    if (!chip) return;
+    const w = (cfgGet().waiter || '').trim();
+    chip.textContent = w ? ('👤 ' + w) : '';
+}
+function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function openOrder(no, ts) {
+    currentOrder = { no: no, ts: ts };
+    clearSearchBox();
+    state = { view: 'order', cat: null, sub: null, search: '' };
+    renderMenu(); renderCart();
+}
+function backToJournal() {
+    clearSearchBox();
+    state = { view: 'log', cat: null, sub: null, search: '' };
+    renderMenu(); renderCart();
+}
+function renderOrderDetail(detail) {
+    const o = activeOrders.find(x => x.no === currentOrder.no && String(x.ts || '') === String(currentOrder.ts || ''));
+    if (!o) {
+        detail.innerHTML = '<div class="cart-empty">Заказ закрыт или не найден</div>' +
+            '<button type="button" class="modal-close" style="width:100%" onclick="backToJournal()">← В журнал</button>';
+        return;
+    }
+    const st = o.status || 'new';
+    const stTxt = st === 'new' ? 'принят на кухне' : (st === 'cooking' ? 'готовится' : (st === 'ready' ? 'ГОТОВО — можно забирать' : 'закрыт'));
+    const bills = JSON.parse(lsGet('pos_riko_bills') || '{}');
+    let btns = '';
+    if (bills[o.no]) btns = '<button type="button" class="btn-pay" style="width:100%" onclick="openPay(' + o.no + ', ' + (o.ts || 0) + ')">💵 Оплата</button>';
+    else if (st === 'ready') btns = '<button type="button" class="btn-serve" style="width:100%" onclick="serveOrder(' + o.no + ', ' + (o.ts || 0) + ')">✓ Заказ собран</button>';
+    const lines = (o.lines || []).map(l => '<div class="od-line"><span class="od-qty">' + l.qty + ' ×</span> ' + esc(l.name) +
+        (l.opt ? ' <span class="od-opt">(' + esc(l.opt) + ')</span>' : '') +
+        ((l.mods && l.mods.length) ? ' <span class="od-mods">[' + l.mods.map(esc).join(', ') + ']</span>' : '') + '</div>').join('');
+    detail.innerHTML =
+        '<h3 style="margin:0 0 4px">Заказ #' + o.no + ' — Стол ' + (o.table || '—') + '</h3>' +
+        '<div class="crumbs">' + (o.time || '') + ' · ' + stTxt + '</div>' +
+        '<div class="od-lines">' + lines + '</div>' +
+        '<div class="od-total">Итого: <b>' + fmt(o.total || 0) + ' BYN</b></div>' + btns +
+        '<button type="button" class="modal-close" style="width:100%" onclick="backToJournal()">← В журнал</button>';
+}
+function openLogView() {
+    clearSearchBox();
+    currentOrder = null;
+    state = { view: 'log', cat: null, sub: null, search: '' };
+    renderMenu(); renderCart();
+    pollOrders();
+}
+async function serveOrder(no, ts) {
+    if (!serverReady()) { toast('Укажите адрес сервера повара в ⚙️ Настройках', true); return; }
+    try {
+        const r = await fetch(srvApi(serverBase(), 'order-status'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ no: no, ts: ts, status: 'done' })
+        });
+        if (!r.ok) throw new Error('сервер вернул код ' + r.status);
+        const o = activeOrders.find(x => x.no === no && x.ts === ts);
+        if (o) {
+            const bills = JSON.parse(lsGet('pos_riko_bills') || '{}');
+            bills[no] = { total: o.total || 0, table: o.table || '', when: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) };
+            lsSet('pos_riko_bills', JSON.stringify(bills));
+        }
+        pollOrders();
+        renderMenu();
+        renderCart();
+        toast('Заказ #' + no + ' собран — можно принять оплату');
+    } catch (e) { toast('Не удалось закрыть заказ: ' + (e.message || 'нет связи'), true); }
+}
+function openPay(no, ts) {
+    const bills = JSON.parse(lsGet('pos_riko_bills') || '{}');
+    if (!bills[no]) return toast('Заказ не найден — обновите экран', true);
+    payNo = no; payTotal = bills[no].total || 0;
+    document.getElementById('pay-title').textContent = 'Оплата заказа #' + no;
+    document.getElementById('pay-total').textContent = fmt(payTotal) + ' BYN';
+    document.getElementById('pay-input').value = '';
+    renderPay();
+    document.getElementById('pay-modal').classList.add('open');
+}
+function closePay() { document.getElementById('pay-modal').classList.remove('open'); }
+function payAdd(v) {
+    const inp = document.getElementById('pay-input');
+    const cur = parseFloat(String(inp.value).replace(',', '.')) || 0;
+    inp.value = String(Math.round((cur + v) * 100) / 100);
+    renderPay();
+}
+function renderPay() {
+    const got = parseFloat(String(document.getElementById('pay-input').value).replace(',', '.')) || 0;
+    const chEl = document.getElementById('pay-change');
+    const diff = Math.round((got - payTotal) * 100) / 100;
+    if (diff < 0) { chEl.className = 'pay-change lack'; chEl.textContent = 'Не хватает: ' + fmt(-diff) + ' BYN'; }
+    else { chEl.className = 'pay-change'; chEl.textContent = 'Сдача: ' + fmt(diff) + ' BYN'; }
+}
+function payDone() {
+    const got = parseFloat(String(document.getElementById('pay-input').value).replace(',', '.')) || 0;
+    if (got < payTotal) { toast('Внесено меньше суммы заказа', true); return; }
+    const bills = JSON.parse(lsGet('pos_riko_bills') || '{}');
+    delete bills[payNo];
+    lsSet('pos_riko_bills', JSON.stringify(bills));
+    saveToLog({ no: payNo, time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), table: '', total: payTotal, count: 0, via: 'оплата' });
+    closePay();
+    pollOrders();
+    renderMenu();
+    renderCart();
+    toast('Оплата заказа #' + payNo + ' принята ✅ Сдача: ' + fmt(got - payTotal) + ' BYN');
+}
+function updateConfigWarning() {
+    const w = document.getElementById('config-warning');
+    if (!w) return;
+    if (serverReady()) w.style.display = 'none';
+    else {
+        w.style.display = 'block';
+        w.textContent = 'Укажите адрес сервера повара в ⚙️ Настройках — например https://riko.of.by/pos.php';
+    }
+}
+
+let audioCtx = null;
+let lastReady = '';
+function unlockAudio() {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+}
+document.addEventListener('click', unlockAudio, { once: true });
+document.addEventListener('touchstart', unlockAudio, { once: true });
+function playReadyBeep() {
+    try {
+        unlockAudio();
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const t0 = audioCtx.currentTime + 0.01;
+        [[880, 0], [1318.5, 0.18]].forEach(pair => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'sine';
+            o.frequency.value = pair[0];
+            g.gain.setValueAtTime(0.0001, t0 + pair[1]);
+            g.gain.exponentialRampToValueAtTime(0.35, t0 + pair[1] + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t0 + pair[1] + 0.17);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(t0 + pair[1]);
+            o.stop(t0 + pair[1] + 0.2);
+        });
+    } catch (e) {}
+}
+function updateLogBadge() {
+    const b = document.getElementById('log-btn');
+    if (!b) return;
+    const n = activeOrders.filter(o => (o.status || 'new') === 'ready').length;
+    b.textContent = n ? ('📜 Журнал заказов (' + n + ' готово ✓)') : '📜 Журнал заказов';
+    b.classList.toggle('has-ready', !!n);
+}
+function renderJournal() {
+    const wrap = document.getElementById('journal-orders');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    renderOrdersPanel(wrap);
+    if (!wrap.children.length) wrap.innerHTML = '<div class="cart-empty">Готовых заказов нет</div>';
+}
 async function sendOrder() {
     if (!cart.length) return toast('Корзина пуста', true);
     if (!serverReady()) {
@@ -532,6 +903,7 @@ async function sendOrder() {
         toast('Заказ #' + orderCounter + ' отправлен на кухню ✅');
         cart = [];
         renderCart();
+        pollOrders();
     } else {
         orderCounter--;
         lsSet('pos_riko_order_no', String(orderCounter));
@@ -563,13 +935,15 @@ function openLog() {
     box.innerHTML = log.length
         ? log.map(e => '<div class="log-entry"><b>#' + e.no + '</b> — ' + e.time + ', ' + e.table + (e.via ? ' · ' + e.via : '') + '<br>' + e.count + ' поз. на ' + fmt(e.total) + ' BYN</div>').join('')
         : '<div class="cart-empty">Пока пусто</div>';
+    renderJournal();
+    pollOrders();
     document.getElementById('log-panel').classList.add('open');
 }
 function closeLog() {
     document.getElementById('log-panel').classList.remove('open');
 }
 
-async function refreshMenuCore(diag) {
+async function refreshMenuCore(diag, silent) {
     const push = (s) => { if (diag) diag.push(s); };
     try {
         const lr = await fetch('menu.json?t=' + Date.now(), { cache: 'no-store' });
@@ -590,11 +964,14 @@ async function refreshMenuCore(diag) {
         if (!sr.ok) { push('сервер: код ' + sr.status); return null; }
         const sd = JSON.parse(await sr.text());
         if (!(sd && Array.isArray(sd.items) && sd.items.length)) { push('сервер: меню пустое'); return null; }
+        WAITERS = Array.isArray(sd.waiters) ? sd.waiters : [];
+        lsSet('pos_riko_waiters', JSON.stringify(WAITERS));
+        if (WAITERS.length && !loggedIn) showLogin();
         const m = mergeBackImages(sd.items);
         if (JSON.stringify(m) !== JSON.stringify(MENU)) {
             MENU = m; lsSet('pos_riko_menu_remote', JSON.stringify(m)); renderMenu();
             toast('Меню обновлено с сервера ✅ (' + Math.round(JSON.stringify(m).length / 1024) + ' КБ)');
-        } else toast('Меню актуально ✅');
+        } else if (!silent) toast('Меню актуально ✅');
         return 'ok';
     } catch (e) { push('сервер: нет связи (это нормально)'); return null; }
 }
@@ -611,6 +988,7 @@ function mergeBackImages(menu) {
     } catch (e) {}
     return menu;
 }
+
 async function checkMenuNow() {
     const diag = [];
     const r = await refreshMenuCore(diag);
@@ -623,6 +1001,8 @@ function showDiag(diag) {
     alert('Почему меню не обновилось:\n\n' + lines + '\n\nПришлите этот текст разработчику — он скажет точное решение.');
 }
 function openSetup() {
+    const lo = document.getElementById('btn-logout');
+    if (lo) lo.style.display = WAITERS.length ? 'block' : 'none';
     const c = cfgGet();
     document.getElementById('setup-waiter').value = c.waiter || '';
     document.getElementById('setup-server').value = c.serverUrl || '';
@@ -644,7 +1024,31 @@ async function saveSetup() {
             else toast('Сервер отвечает кодом ' + r.status, true);
         } catch (e) { toast('Нет связи с сервером: ' + (e.message || 'ошибка'), true); }
     } else toast('Сохранено ✅');
+    updateConfigWarning();
 }
+
+// --- ЗАПУСК POS ---
+(function init() {
+    const select = document.getElementById('table-select');
+    TABLES.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        select.appendChild(opt);
+    });
+    document.getElementById('menu-search').oninput = (e) => {
+        state.search = e.target.value;
+        renderMenu();
+    };
+    updateConfigWarning();
+    renderMenu();
+    renderCart();
+    refreshMenuCore(null, true);
+    pollOrders();
+    setInterval(pollOrders, 6000);
+    if (WAITERS.length && !loggedIn) showLogin();
+    updateWaiterChip();
+})();
 
 </script>
 
