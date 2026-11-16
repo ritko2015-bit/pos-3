@@ -163,6 +163,8 @@
     .order-detail { background: #fff; border: 1px solid #e2e6e4; border-radius: var(--radius); padding: 14px; }
     .od-line { padding: 6px 0; border-bottom: 1px dashed #e2e6e4; }
     .od-qty { color: var(--gold); font-weight: 900; margin-right: 4px; }
+    .ok-ck { color: #1e7d3c; font-weight: 900; margin-right: 6px; }
+    .no-ck { color: #c0392b; font-weight: 900; margin-right: 6px; }
     .od-opt { color: #666; }
     .od-mods { color: #666; font-size: .9rem; }
     .od-lines { margin: 10px 0; }
@@ -270,7 +272,7 @@
         <button type="button" class="modal-close" onclick="checkMenuNow()">🔄 Проверить обновления меню</button>
         <button type="button" class="modal-add" id="btn-logout" style="width:100%;display:none" onclick="switchWaiter()">🚪 Сменить официанта</button>
         <button type="button" class="modal-close" onclick="closeSetup()">Работать без связи (офлайн)</button>
-        <div class="hint" style="margin-top:10px">Сборка POS v65 от 15.11.2026</div>
+        <div class="hint" style="margin-top:10px">Сборка POS v66 от 16.11.2026</div>
     </div>
 </div>
 <div class="modal" id="item-modal" onclick="if (event.target === this) closeModal()">
@@ -734,12 +736,19 @@ function renderOrderDetail(detail) {
     let btns = '';
     if (bills[o.no]) btns = '<button type="button" class="btn-pay" style="width:100%" onclick="openPay(' + o.no + ', ' + (o.ts || 0) + ')">💵 Оплата</button>';
     else if (st === 'ready') btns = '<button type="button" class="btn-serve" style="width:100%" onclick="serveOrder(' + o.no + ', ' + (o.ts || 0) + ')">✓ Заказ собран</button>';
-    const lines = (o.lines || []).map(l => '<div class="od-line"><span class="od-qty">' + l.qty + ' ×</span> ' + esc(l.name) +
-        (l.opt ? ' <span class="od-opt">(' + esc(l.opt) + ')</span>' : '') +
-        ((l.mods && l.mods.length) ? ' <span class="od-mods">[' + l.mods.map(esc).join(', ') + ']</span>' : '') + '</div>').join('');
+    const rd = Array.isArray(o.ready) ? o.ready : [];
+    const allR = rd.includes('ALL');
+    const lines = (o.lines || []).map(l => {
+        const done = allR || (l.station ? rd.includes(l.station) : false);
+        const mark = done ? '<span class="ok-ck">✓</span>' : '<span class="no-ck">✗</span>';
+        return '<div class="od-line">' + mark + '<span class="od-qty">' + l.qty + ' ×</span> ' + esc(l.name) +
+            (l.opt ? ' <span class="od-opt">(' + esc(l.opt) + ')</span>' : '') +
+            ((l.mods && l.mods.length) ? ' <span class="od-mods">[' + l.mods.map(esc).join(', ') + ']</span>' : '') + '</div>';
+    }).join('');
+    const readyTxt = allR ? '' : (rd.length ? '<div class="crumbs">Готово: ' + rd.map(esc).join(', ') + '</div>' : '');
     detail.innerHTML =
         '<h3 style="margin:0 0 4px">Заказ #' + o.no + ' — Стол ' + (o.table || '—') + '</h3>' +
-        '<div class="crumbs">' + (o.time || '') + ' · ' + stTxt + '</div>' +
+        '<div class="crumbs">' + (o.time || '') + ' · ' + stTxt + '</div>' + readyTxt +
         '<div class="od-lines">' + lines + '</div>' +
         '<div class="od-total">Итого: <b>' + fmt(o.total || 0) + ' BYN</b></div>' + btns +
         '<button type="button" class="modal-close" style="width:100%" onclick="backToJournal()">← В журнал</button>';
