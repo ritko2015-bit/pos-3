@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#082e27">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Кухня RIKO">
+<link rel="manifest" href="manifest.json">
 <title>Кухня RIKO</title>
 <style>
 :root { --green:#0a3a32; --green-dark:#082e27; --gold:#bfa24e; --danger:#d32f2f; }
@@ -18,17 +24,18 @@ h1 { text-align: center; color: #fff; margin: 0 0 8px; font-size: 1.4rem; }
 .banner { background: var(--danger); color: #fff; text-align: center; padding: 8px; border-radius: 10px; margin-bottom: 10px; }
 .modechip { font-size: .8rem; border: 1px solid var(--gold); color: var(--gold); border-radius: 999px; padding: 3px 10px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.order { background: var(--green); border: 2px solid var(--gold); border-radius: 14px; padding: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.order { background: var(--green); border: 2px solid var(--gold); border-radius: 14px; padding: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.35); font-size: var(--kfs, 15px); }
 .order.ready { opacity: .55; }
 .ohead { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.05rem; margin-bottom: 4px; }
 .ohead b { color: var(--gold); font-size: 1.15rem; }
 .owaiter { font-size: .85rem; opacity: .8; margin-bottom: 6px; }
-.line { padding: 5px 0; border-bottom: 1px dashed rgba(255,255,255,.15); font-size: .98rem; overflow: hidden; }
-.qty { color: var(--gold); font-weight: bold; margin-right: 4px; }
-.mods { opacity: .85; font-size: .85rem; }
+.line { padding: 5px 0; border-bottom: 1px dashed rgba(255,255,255,.15); font-size: 1em; overflow: hidden; }
+.qty { color: var(--gold); font-weight: 900; margin-right: 4px; font-size: 1.25em; }
+.mods { opacity: .85; font-size: .8em; }
+    .opt-w { font-weight: 800; font-size: 1.15em; color: var(--gold); }
 .price { float: right; }
-.ototal { text-align: right; margin: 8px 0 6px; font-size: 1.05rem; }
-.ostatus { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: .8rem; font-weight: bold; margin: 0 8px 8px 0; }
+.ototal { text-align: right; margin: 8px 0 6px; font-size: 1.05em; }
+.ostatus { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: .8em; font-weight: bold; margin: 0 8px 8px 0; }
 .st-new { background: var(--gold); color: #082e27; animation: pulse 1s infinite; }
 .st-cooking { background: #2f6fd0; color: #fff; }
 .st-ready { background: #1e7a45; color: #fff; }
@@ -53,6 +60,7 @@ h1 { text-align: center; color: #fff; margin: 0 0 8px; font-size: 1.4rem; }
 <div class="bar">
     <button type="button" onclick="manualRefresh()">🔄 Обновить</button>
     <label class="chk"><input type="checkbox" id="hide-ready"> скрывать готовые</label>
+    <button type="button" onclick="toggleFullscreen()">⛶</button>
     <button type="button" onclick="openSetup()">⚙️</button>
     <span id="mode-chip" class="modechip" style="display:none"></span>
     <span id="sync-time" class="sync"></span>
@@ -66,15 +74,15 @@ h1 { text-align: center; color: #fff; margin: 0 0 8px; font-size: 1.4rem; }
     <div class="modal-box">
         <h3>Настройки кухни</h3>
         <label class="setup-lbl" for="setup-srv">Адрес сервера повара (если запущен)</label>
-        <input type="text" id="setup-srv" class="setup-inp" placeholder="http://192.168.х.х:8080 — необязательно">
-        <label class="setup-lbl" for="setup-token">Токен бота (если сервера нет — через Telegram)</label>
-        <input type="text" id="setup-token" class="setup-inp" placeholder="1234567890:AA...">
-        <label class="setup-lbl" for="setup-chat">ID чата кухни</label>
-        <input type="text" id="setup-chat" class="setup-inp" placeholder="-1001234567890">
-        <p class="hint">Если указан сервер — заказы берутся с него (статусы общие для всех). Если сервера нет — заказы берутся из Telegram-чата кухни: нужен токен бота и ID того же чата, что в POS. В Telegram-режиме статусы хранятся только на этом устройстве.</p>
+        <input type="text" id="setup-srv" class="setup-inp" placeholder="http://192.168.х.х:8080 или https://ваш-сайт/pos.php">
+        <label class="setup-lbl" for="setup-scr">Кухонный экран (что показывать)</label>
+        <select id="setup-scr" class="setup-inp"><option value="all">Все экраны</option></select>
+        <label class="setup-lbl" for="setup-fs">Размер шрифта карточек (px, 14–30)</label>
+        <input type="number" id="setup-fs" class="setup-inp" min="14" max="30" step="1" inputmode="numeric" placeholder="15">
+        <p class="hint">Адрес сервера: локальный (http://192.168.х.х:8080) или в интернете (https://ваш-сайт/pos.php). Заказы и статусы берутся с сервера — общие для всех экранов кухни.</p>
         <button type="button" class="mbtn" onclick="saveSetup()">Сохранить и проверить</button>
         <button type="button" class="mbtn2" onclick="closeSetup()">Закрыть</button>
-        <div class="hint" style="margin-top:8px">Кухня RIKO v56</div>
+        <div class="hint" style="margin-top:8px">Кухня RIKO v65</div>
     </div>
 </div>
 
@@ -86,8 +94,6 @@ let mode = null;
 let srvBase = null;
 let orders = [];
 let seen = {};
-let tgOffset = null;
-let tgLoopOn = false;
 let beeper = null;
 let firstLoad = true;
 
@@ -96,6 +102,7 @@ function saveCfg() { try { localStorage.setItem(LS_CFG, JSON.stringify(kcfg)); }
 function stMap() { try { return JSON.parse(localStorage.getItem(LS_STATUS)) || {}; } catch (e) { return {}; } }
 function saveStMap(m) { try { localStorage.setItem(LS_STATUS, JSON.stringify(m)); } catch (e) {} }
 
+function srvApi(b, name) { const s = String(b || '').replace(/\/+$/, ''); return s.endsWith('.php') ? s + '?action=' + name : s + '/' + name; }
 function fmt(n) { return Number(n).toFixed(2).replace('.', ','); }
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function showToast(msg) {
@@ -127,21 +134,20 @@ async function detectMode() {
     const su = String(kcfg.serverUrl || '').trim().replace(/\/+$/, '');
     if (su) {
         try {
-            const r = await fetch(su + '/orders', { cache: 'no-store' });
+            const r = await fetch(srvApi(su, 'orders'), { cache: 'no-store' });
             if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.orders)) { srvBase = su; mode = 'server'; return; } }
         } catch (e) {}
     }
-    if ((kcfg.token || '').trim() && (kcfg.chatId || '').trim()) { mode = 'telegram'; return; }
     mode = null;
     openSetup();
-    showBanner('Укажите адрес сервера или токен бота в настройках (⚙️)');
+    showBanner('Укажите адрес сервера повара в настройках (⚙️)');
 }
 
 function chip() {
     const c = document.getElementById('mode-chip');
     if (!mode) { c.style.display = 'none'; return; }
     c.style.display = 'inline-block';
-    c.textContent = mode === 'server' ? 'режим: сервер' : 'режим: Telegram';
+    c.textContent = 'режим: сервер';
 }
 function showBanner(msg) {
     const b = document.getElementById('err-banner');
@@ -152,10 +158,20 @@ function hideBanner() { document.getElementById('err-banner').style.display = 'n
 
 async function pollServer(manual) {
     try {
-        const r = await fetch(srvBase + '/orders', { cache: 'no-store' });
+        const r = await fetch(srvApi(srvBase, 'orders'), { cache: 'no-store' });
         if (!r.ok) throw new Error('код ' + r.status);
         const d = await r.json();
         orders = d.orders || [];
+        if (Date.now() - (window._lastStFetch || 0) > 60000) {
+            window._lastStFetch = Date.now();
+            try {
+                const mr = await fetch(srvApi(srvBase, 'menu'), { cache: 'no-store' });
+                if (mr.ok) {
+                    const md = await mr.json();
+                    if (Array.isArray(md.stations)) localStorage.setItem('pos_riko_kitchen_stations', JSON.stringify(md.stations));
+                }
+            } catch (e2) {}
+        }
         let fresh = 0;
         if (!firstLoad) orders.forEach(o => { if (!seen[o.ts]) fresh++; });
         orders.forEach(o => { seen[o.ts] = 1; });
@@ -169,98 +185,10 @@ async function pollServer(manual) {
     }
 }
 
-function parseOrderText(text) {
-    try {
-        if (text.indexOf('НОВЫЙ ЗАКАЗ') === -1) return null;
-        const num = (text.match(/НОВЫЙ ЗАКАЗ #(\d+)/) || [])[1];
-        if (!num) return null;
-        const table = (((text.match(/📋 Стол: (.+)/) || [])[1]) || '').trim();
-        const time = (((text.match(/🕒 (\d{1,2}:\d{2})/) || [])[1]) || '').trim();
-        const waiter = (((text.match(/👤 (.+)/) || [])[1]) || '').trim();
-        const total = parseFloat((((text.match(/Итого:\s*([\d,]+)/) || [])[1] || '0').replace(',', '.'))) || 0;
-        const lines = [];
-        const lineRe = /(?:^|\n)\s*(\d+)\.\s+([^\n]+)/g;
-        let m;
-        while ((m = lineRe.exec(text)) !== null) {
-            let body = m[2];
-            let lt = null;
-            const pm = body.match(/\s+—\s+([\d,]+)\s*BYN\s*$/);
-            if (pm) { lt = parseFloat(pm[1].replace(',', '.')) || 0; body = body.slice(0, body.length - pm[0].length); }
-            let qty = 1;
-            const qm = body.match(/\s*×\s*(\d+)\s*$/);
-            if (qm) { qty = parseInt(qm[1], 10); body = body.replace(/\s*×\s*\d+\s*$/, ''); }
-            let mods = [];
-            const mm = body.match(/\s*\[(.+)\]\s*$/);
-            if (mm) { mods = mm[1].split(',').map(s => s.trim()); body = body.replace(/\s*\[(.+)\]\s*$/, ''); }
-            let opt = '';
-            const om = body.match(/\s*\(([^()]+)\)\s*$/);
-            if (om) { opt = om[1].trim(); body = body.replace(/\s*\(([^()]+)\)\s*$/, ''); }
-            lines.push({ name: body.trim(), opt: opt, mods: mods, qty: qty, price: lt || 0, lt: lt });
-        }
-        if (!lines.length) return null;
-        return { no: parseInt(num, 10), table: table, time: time, waiter: waiter, total: total, lines: lines, status: 'new', src: 'telegram' };
-    } catch (e) { return null; }
-}
-
-function handleUpdate(u) {
-    const msg = u.message || u.channel_post;
-    if (!msg || !msg.text) return;
-    const chatId = msg.chat ? String(msg.chat.id) : '';
-    if (kcfg.chatId && String(kcfg.chatId).trim() && chatId !== String(kcfg.chatId).trim()) return;
-    if (msg.text.indexOf('НОВЫЙ ЗАКАЗ') === -1) return;
-    const o = parseOrderText(msg.text);
-    if (!o) return;
-    const d = new Date(msg.date * 1000);
-    o.day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    if (o.day !== todayKey()) return;
-    o.ts = msg.date * 1000;
-    const st = stMap();
-    if (st['k' + o.ts]) o.status = st['k' + o.ts];
-    if (st['del' + o.ts]) return;
-    orders = orders.filter(x => x.ts !== o.ts);
-    orders.unshift(o);
-    orders.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    if (!seen[o.ts]) { beep(); buzz(); showToast('Новый заказ #' + o.no); }
-    seen[o.ts] = 1;
-}
-
-async function tgLoop() {
-    if (mode !== 'telegram' || tgLoopOn) return;
-    tgLoopOn = true;
-    while (mode === 'telegram') {
-        try {
-            const off = (tgOffset == null || tgOffset === 0) ? '' : ('&offset=' + tgOffset);
-            const r = await fetch('https://api.telegram.org/bot' + kcfg.token.trim() + '/getUpdates?timeout=25' + off, { cache: 'no-store' });
-            const d = await r.json();
-            if (!d.ok) throw new Error(d.description || 'Telegram отказал');
-            const ups = d.result || [];
-            ups.forEach(handleUpdate);
-            if (ups.length) {
-                const maxId = Math.max.apply(null, ups.map(u => u.update_id));
-                tgOffset = (tgOffset == null || tgOffset === 0) ? maxId + 1 : Math.max(tgOffset, maxId + 1);
-                hideBanner();
-                document.getElementById('sync-time').textContent = 'обновлено ' + new Date().toLocaleTimeString('ru-RU');
-                render();
-            } else if (tgOffset == null) {
-                tgOffset = 0;
-                hideBanner();
-                document.getElementById('sync-time').textContent = 'обновлено ' + new Date().toLocaleTimeString('ru-RU');
-                render();
-            } else {
-                await new Promise(res => setTimeout(res, 2500));
-            }
-        } catch (e) {
-            showBanner('Telegram: нет связи (' + (e.message || 'ошибка') + '). Пробую ещё…');
-            await new Promise(res => setTimeout(res, 3000));
-        }
-    }
-    tgLoopOn = false;
-}
-
 async function manualRefresh() {
     if (mode === 'server') await pollServer(true);
-    else if (mode === 'telegram') { render(); showToast('Заказы приходят из Telegram автоматически'); }
-    else { await detectMode(); chip(); if (mode === 'server') pollServer(true); if (mode === 'telegram') tgLoop(); }
+    
+    else { await detectMode(); chip(); if (mode === 'server') pollServer(true); }
 }
 
 async function setStatus(ts, st) {
@@ -268,7 +196,7 @@ async function setStatus(ts, st) {
     if (!o) return;
     if (mode === 'server') {
         try {
-            const r = await fetch(srvBase + '/order-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ no: o.no, ts: ts, status: st }) });
+            const r = await fetch(srvApi(srvBase, 'order-status'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ no: o.no, ts: ts, status: st }) });
             if (!r.ok) throw new Error('код ' + r.status);
             await pollServer(true);
         } catch (e) { showToast('Не удалось изменить статус — нет связи с сервером'); }
@@ -286,7 +214,7 @@ async function delOrder(ts) {
     if (!confirm('Убрать заказ #' + o.no + ' с экрана?')) return;
     if (mode === 'server') {
         try {
-            const r = await fetch(srvBase + '/order-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ no: o.no, ts: ts }) });
+            const r = await fetch(srvApi(srvBase, 'order-delete'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ no: o.no, ts: ts }) });
             if (!r.ok) throw new Error('код ' + r.status);
             await pollServer(true);
         } catch (e) { showToast('Не удалось — нет связи с сервером'); }
@@ -303,7 +231,9 @@ function render() {
     const hideReady = document.getElementById('hide-ready').checked;
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
-    const shown = orders.filter(o => !(hideReady && o.status === 'ready'));
+    const scr = kcfg.screen || '';
+    const linesFor = o => scr ? (o.lines || []).filter(l => !l.station || l.station === scr) : (o.lines || []);
+    const shown = orders.filter(o => o.status !== 'done' && !(hideReady && o.status === 'ready') && linesFor(o).length);
     const freshCount = orders.filter(o => o.status === 'new').length;
     const badge = document.getElementById('new-badge');
     badge.style.display = freshCount ? 'inline-block' : 'none';
@@ -313,11 +243,9 @@ function render() {
         const st = o.status || 'new';
         const card = document.createElement('div');
         card.className = 'order ' + st;
-        const lines = (o.lines || []).map(l => {
-            const opt = l.opt ? ' (' + esc(l.opt) + ')' : '';
+        const lines = linesFor(o).map(l => {
             const mods = (l.mods && l.mods.length) ? ' <span class="mods">[' + l.mods.map(esc).join(', ') + ']</span>' : '';
-            const pricePart = (l.lt != null ? fmt(l.lt) : (l.price ? fmt(l.price * l.qty) : ''));
-            return '<div class="line"><span class="qty">' + l.qty + ' ×</span> ' + esc(l.name) + opt + mods + (pricePart ? ' <span class="price">' + pricePart + '</span>' : '') + '</div>';
+            return '<div class="line"><span class="qty">' + l.qty + ' ×</span> ' + esc(l.name) + (l.opt ? ' <span class="opt-w">(' + esc(l.opt) + ')</span>' : '') + mods + '</div>';
         }).join('');
         const statusLabel = st === 'cooking' ? 'В РАБОТЕ' : (st === 'ready' ? 'ГОТОВО' : 'НОВЫЙ');
         const btn = st === 'new'
@@ -335,21 +263,33 @@ function render() {
     });
 }
 
+function toggleFullscreen() {
+    try {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => showToast('Не удалось развернуть экран'));
+        } else showToast('Браузер не поддерживает полный экран — используйте «Добавить на главный экран»');
+    } catch (e) { showToast('Не удалось развернуть экран'); }
+}
 function openSetup() {
     document.getElementById('setup-srv').value = kcfg.serverUrl || '';
-    document.getElementById('setup-token').value = kcfg.token || '';
-    document.getElementById('setup-chat').value = kcfg.chatId || '';
+    const st = JSON.parse(localStorage.getItem('pos_riko_kitchen_stations') || '[]');
+    const sel = document.getElementById('setup-scr');
+    sel.innerHTML = '<option value="all">Все экраны</option>' + st.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
+    sel.value = st.indexOf(kcfg.screen) >= 0 ? kcfg.screen : 'all';
+    document.getElementById('setup-fs').value = kcfg.fontSize || 15;
     document.getElementById('setup-modal').classList.add('open');
 }
 function closeSetup() { document.getElementById('setup-modal').classList.remove('open'); }
 async function saveSetup() {
     kcfg.serverUrl = document.getElementById('setup-srv').value.trim();
-    kcfg.token = document.getElementById('setup-token').value.trim();
-    kcfg.chatId = document.getElementById('setup-chat').value.trim();
-    if (!kcfg.serverUrl && !(kcfg.token && kcfg.chatId)) {
-        showToast('Укажите адрес сервера или токен и ID чата');
-        return;
-    }
+    kcfg.fontSize = Math.min(30, Math.max(14, Number(document.getElementById('setup-fs').value) || 15));
+    const scrSel = document.getElementById('setup-scr');
+    kcfg.screen = (scrSel && scrSel.value !== 'all') ? scrSel.value : '';
+    document.documentElement.style.setProperty('--kfs', kcfg.fontSize + 'px');
+    render();
+    if (!kcfg.serverUrl) { showToast('Укажите адрес сервера повара'); return; }
     saveCfg();
     closeSetup();
     showToast('Сохранено, проверяю связь…');
@@ -357,27 +297,14 @@ async function saveSetup() {
     await detectMode();
     chip();
     if (mode === 'server') { showToast('Связь с сервером есть ✅'); pollServer(true); }
-    else if (mode === 'telegram') {
-        try {
-            const r = await fetch('https://api.telegram.org/bot' + kcfg.token.trim() + '/getMe');
-            const d = await r.json();
-            if (!d.ok) throw new Error(d.description || 'токен не принят');
-            showToast('Telegram подключён: @' + d.result.username + ' ✅');
-            tgLoop();
-        } catch (e) {
-            showToast('Токен не принят: ' + (e.message || 'нет связи'));
-            openSetup();
-        }
-    }
 }
-
 document.getElementById('hide-ready').onchange = render;
 (async function init() {
+    document.documentElement.style.setProperty('--kfs', (kcfg.fontSize || 15) + 'px');
     await detectMode();
     chip();
     if (mode === 'server') { pollServer(true); setInterval(pollServer, 3000); }
-    if (mode === 'telegram') tgLoop();
-})();
+    })();
 </script>
 </body>
 </html>
